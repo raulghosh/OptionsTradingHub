@@ -55,6 +55,18 @@ def test_cpi_nfp_pce_block_entry():
         assert any(v.startswith(f"EVENT_{tag}") for v in vetoes), (tag, vetoes)
 
 
+def test_skew_tilts_fly_vs_condor():
+    ts = datetime(2026, 9, 21, 10, 15, tzinfo=ET)
+    def scan(level):
+        return Engine(SyntheticFeed(regime="calm", ts=ts, skew_end=level), Config(), "weekly", journal=None).scan().regime
+    cheap, rich = scan(110.0), scan(165.0)       # far below / above the synthetic ~135 mean
+    assert cheap.skew_pct < 10 and rich.skew_pct > 90, (cheap.skew_pct, rich.skew_pct)
+    assert cheap.fly_score > rich.fly_score and rich.condor_score > cheap.condor_score
+    assert cheap.strategy == "IRON_FLY", cheap        # same market, cheap skew -> fly
+    assert rich.strategy == "IRON_CONDOR", rich       # rich skew -> fly gated off
+    assert any(w.startswith("SKEW_RICH") for w in rich.warnings)
+
+
 def test_management_triggers():
     cfg, prof = Config(), PROFILES["weekly"]
     ts = datetime(2026, 9, 21, 10, 15, tzinfo=ET)

@@ -55,7 +55,7 @@ class Snapshot:
     vix: float
     vix_prev_close: float
     chain: list[OptionQuote]
-    history: pd.DataFrame        # daily: open, high, low, close, vix (+ optional vix3m, vvix, vix9d)
+    history: pd.DataFrame        # daily: open, high, low, close, vix (+ optional vix3m, vvix, vix9d, skew)
     vix3m: float | None = None
     vvix: float | None = None
     vix9d: float | None = None
@@ -91,20 +91,21 @@ def fill_greeks(chain: list[OptionQuote], snap_ts: datetime, spot: float, r: flo
 # ---------------- CBOE public index history (free, no key) ----------------
 
 def cboe_index_history(symbol: str) -> pd.Series:
-    """Daily closes for VIX, VIX3M, VIX9D, VVIX from CBOE's public CSVs."""
+    """Daily closes for VIX, VIX3M, VIX9D, VVIX, SKEW from CBOE's public CSVs (SKEW has a single value column)."""
     url = f"https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
     r = requests.get(url, timeout=20)
     r.raise_for_status()
     df = pd.read_csv(io.StringIO(r.text))
     df.columns = [c.strip().lower() for c in df.columns]
     df["date"] = pd.to_datetime(df["date"])
-    return df.set_index("date")["close"].rename(symbol.lower())
+    col = "close" if "close" in df.columns else df.columns[-1]
+    return df.set_index("date")[col].astype(float).rename(symbol.lower())
 
 
 # ---------------- CSV replay ----------------
 
 class CSVFeed:
-    """history.csv: date,open,high,low,close,vix[,vix3m,vvix,vix9d]
+    """history.csv: date,open,high,low,close,vix[,vix3m,vvix,vix9d,skew]
        chain.csv:   expiry,strike,cp,bid,ask[,iv,delta,gamma,theta,vega,oi,volume]
        Spot = last close of history unless `spot` given."""
 
@@ -123,7 +124,7 @@ class CSVFeed:
                              int(getattr(row, "oi", 0) or 0), int(getattr(row, "volume", 0) or 0))
                  for row in c.itertuples()]
         fill_greeks(chain, ts, spot, self.r, self.q)
-        g = lambda col: float(h[col].iloc[-1]) if col in h else None
+        g = lambda col: float(h[col].iloc[-1]) if col in h else None   # skew column, if present, is read by regime
         return Snapshot(ts, spot, float(h["vix"].iloc[-1]), float(h["vix"].iloc[-2]), chain, h,
                         g("vix3m"), g("vvix"), g("vix9d"), source="csv")
 
@@ -161,6 +162,10 @@ class SchwabFeed:
                 hist = hist.join(self._history(sym)["close"].rename(col), how="left")
             except Exception:
                 pass
+        try:   # Schwab has no SKEW index history; CBOE's free CSV does
+            hist = hist.join(cboe_index_history("SKEW"), how="left")
+        except Exception:
+            pass
         chain = self._chain(now)
         fill_greeks(chain, now, spot, self.r, self.q)
         return Snapshot(now, spot, last("$VIX"), prev("$VIX"), chain, hist,
@@ -226,7 +231,7 @@ class AlpacaFeed:
         vix = cboe_index_history("VIX")
         hist = hist.join(vix, how="left")
         extra = {}
-        for sym in ("VIX3M", "VVIX", "VIX9D"):
+        for sym in ("VIX3M", "VVIX", "VIX9D", "SKEW"):
             try:
                 s = cboe_index_history(sym)
                 hist = hist.join(s, how="left")
@@ -285,9 +290,12 @@ def _gbm_history(rng, n: int, end: date, spot_end: float, regime: str = "calm") 
         vix = vix * 1.8; ts_ratio, vvix = 1.08, 140.0
     else:
         ts_ratio, vvix = 0.92, 92.0
+    skew = np.empty(n); skew[0] = 135.0
+    for i in range(1, n):
+        skew[i] = 135.0 + 0.95 * (skew[i - 1] - 135.0) + 2.2 * rng.standard_normal()
     idx = pd.bdate_range(end=end, periods=n + 5)[-n:]
     return pd.DataFrame({"open": opn, "high": high, "low": low, "close": close, "vix": vix, "vix3m": vix / ts_ratio,
-                         "vvix": vvix, "vix9d": vix * (1.05 if regime == "stress" else 0.95)}, index=idx)
+                         "vvix": vvix, "vix9d": vix * (1.05 if regime == "stress" else 0.95), "skew": skew}, index=idx)
 
 
 def _bsm_chain(rng, spot: float, atm_iv: float, ts: datetime, expiries: list[date], r: float, q: float) -> list[OptionQuote]:
@@ -313,9 +321,9 @@ class SyntheticFeed:
     """One snapshot: GBM history, contango VIX, BSM chain with put skew. Deterministic by seed."""
 
     def __init__(self, seed=7, days=420, spot0=6400.0, atm_iv=18.0, regime="calm", ts: datetime | None = None,
-                 dtes=(0, 1, 2, 7, 14, 30, 45), r=0.04, q=0.013):
+                 dtes=(0, 1, 2, 7, 14, 30, 45), r=0.04, q=0.013, skew_end: float | None = None):
         self.seed, self.days, self.spot0, self.atm_iv, self.regime, self.dtes, self.r, self.q = seed, days, spot0, atm_iv, regime, dtes, r, q
-        self.ts = ts
+        self.ts, self.skew_end = ts, skew_end
 
     def snapshot(self) -> Snapshot:
         rng = np.random.default_rng(self.seed)
@@ -325,6 +333,10 @@ class SyntheticFeed:
         vix[-15:] += np.linspace(0, self.atm_iv - vix[-1], 15)   # recent vol pickup so IVR is mid-range
         hist["vix"] = vix; hist["vix3m"] = vix / (1.08 if self.regime == "stress" else 0.92)
         hist["vix9d"] = vix * (1.05 if self.regime == "stress" else 0.95)
+        if self.skew_end is not None:
+            sk = hist["skew"].to_numpy().copy()
+            sk[-10:] += np.linspace(0, self.skew_end - sk[-1], 10)
+            hist["skew"] = sk
         spot = float(hist["close"].iloc[-1])
         atm = float(vix[-1]) if self.regime == "stress" else self.atm_iv
         chain = _bsm_chain(rng, spot, atm, ts, [ts.date() + timedelta(days=d) for d in self.dtes], self.r, self.q)

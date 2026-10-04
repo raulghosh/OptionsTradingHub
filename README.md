@@ -49,14 +49,24 @@ high-credit, narrow-zone bet on mean reversion; the condor is the lower-credit, 
 | ADX(14) | Trend strength | < 20 | < 25 | > 25 |
 | (close − SMA20) / ATR | Extension from mean | |z| < 0.5 | |z| < 1.5 | > 1.5 |
 | RV5 / RV20 | Realized vol compressing | < 1 | any | rising = warning |
-| 25Δ put IV − 25Δ call IV | Skew | — | — | > 8 vol pts = warning |
+| CBOE SKEW percentile (252d) | Tail-put pricing vs its own history | low (≤ 30th) | high (≥ 70th) | fly blocked above 80th |
+| 25Δ put IV − 25Δ call IV | Skew on the traded expiry | — | — | > 8 vol pts = warning |
 | Bid/ask on the 16Δ strikes | Liquidity | < 10 % of mid | same | > 10 % |
 | VIX vs prior close | Vol shock | — | — | > +20 % kill switch |
 | Event calendar | FOMC/CPI/NFP inside the no-entry window | none | none | any |
 
-Each strategy gets a 0–1 score from the first five rows (weights 25/25/20/20/10). Any veto → `NONE`.
-Fly only if it also meets its own hard limits (IVR ≥ 35, ADX ≤ 20, |z| ≤ 0.5); otherwise condor if
-its score ≥ `min_score` (0.55). The fly body snaps to a high-open-interest strike within 0.5 % of
+Each strategy gets a 0–1 score. Fly: IV rank 20, VRP 20, ADX 20, mean distance 15, RV compression
+10, **cheap skew 15**. Condor: IV rank 25, VRP 20, ADX 20, mean distance 15, RV compression 10,
+**rich skew 10**. Any veto → `NONE`. Fly only if it also meets its own hard limits (IVR ≥ 35,
+ADX ≤ 20, |z| ≤ 0.5, SKEW ≤ 80th percentile); otherwise condor if its score ≥ `min_score` (0.55).
+
+**Why skew picks between them.** The fly sells the ATM straddle and *buys* the OTM put wing; the
+condor *sells* an OTM put. When skew is historically low, OTM puts are cheap: the fly's protection
+costs little and the market is pricing little tail fear, which is the pin/mean-reversion regime the
+fly needs. When skew is historically high, the same put is rich, so the condor's short put is
+being paid well and the fly is overpaying for its wing. The historical measure is the CBOE SKEW
+index (free daily history since 1990, pulled from CBOE for every feed); the chain's own 25Δ
+put−call spread is reported alongside it but has no history until you have recorded snapshots. The fly body snaps to a high-open-interest strike within 0.5 % of
 spot when one exists (pin magnet), otherwise ATM.
 
 ## 3. DTE profiles (`ironfly/config.py`)

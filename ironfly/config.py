@@ -70,6 +70,11 @@ class Config:
     fly_max_sma_z: float = 0.5            # |close - SMA20| in ATR units
     condor_max_sma_z: float = 1.5
     steep_skew: float = 8.0               # 25d put IV - 25d call IV, vol points
+    # CBOE SKEW index, ranked over ivr_lookback days. Low = OTM puts cheap vs history -> fly wings
+    # cheap, little tail fear (pin regime). High = puts rich -> condor's short put is well paid.
+    skew_low_pct: float = 30.0            # at/below: full fly tilt
+    skew_high_pct: float = 70.0           # at/above: full condor tilt
+    fly_max_skew_pct: float = 80.0        # hard gate: no fly above this percentile
     max_spread_pct: float = 0.10          # (ask-bid)/mid on the short strikes
     min_score: float = 0.55
     breach_adx: float = 30.0              # breached short strike + trending = close, don't roll

@@ -40,7 +40,8 @@ def print_scan(r):
     print(f"strategy: {g.strategy}   fly={g.fly_score:.2f} condor={g.condor_score:.2f}")
     print(f"IVR {g.ivr:.0f} / IVP {g.ivp:.0f}  VIX {g.vix:.1f}  RV20 {g.rv20:.1f}  YZ20 {g.yz20:.1f}  VRP {g.vrp:+.1f}"
           f"  VIX/VIX3M {g.ts_ratio}  9d/30d {g.ts9_ratio}  VVIX {g.vvix}")
-    print(f"ADX {g.adx}  SMA20-z {g.sma_z}  BBwidth%ile {g.bb_width_pct}  skew25 {g.skew25}  ATM IV {g.atm_iv}  1sd move ±{g.expected_move}")
+    print(f"ADX {g.adx}  SMA20-z {g.sma_z}  BBwidth%ile {g.bb_width_pct}  ATM IV {g.atm_iv}  1sd move ±{g.expected_move}")
+    print(f"skew: CBOE SKEW {g.skew_index} ({g.skew_pct}%ile)  25d put-call {g.skew25} vol pts")
     if g.vetoes:   print("VETOES:  ", ", ".join(g.vetoes))
     if g.warnings: print("WARNINGS:", ", ".join(g.warnings))
     if g.events:   print("events:  ", ", ".join(g.events))

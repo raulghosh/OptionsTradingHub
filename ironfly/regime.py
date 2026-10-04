@@ -30,7 +30,9 @@ class Regime:
     adx: float
     sma_z: float
     bb_width_pct: float
-    skew25: float | None
+    skew25: float | None               # 25d put IV - 25d call IV from the chain (vol points)
+    skew_index: float | None           # CBOE SKEW
+    skew_pct: float | None             # SKEW percentile over ivr_lookback (0..100)
     atm_iv: float | None
     expected_move: float | None
     spread_pct: float | None
@@ -123,6 +125,15 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
     if profile.target_dte == 0 and not (profile.entry_window[0] <= hhmm <= profile.entry_window[1]):
         vetoes.append("OUTSIDE_ENTRY_WINDOW")
 
+    skew_idx = skew_pct = None
+    if "skew" in h.columns and h["skew"].notna().sum() > 60:
+        sk = h["skew"].dropna()
+        skew_idx = float(sk.iloc[-1])
+        _, skew_pct = ind.iv_rank(sk, cfg.ivr_lookback)
+    if skew_pct is not None and skew_pct > cfg.fly_max_skew_pct:
+        warns.append(f"SKEW_RICH({skew_pct:.0f}%ile): no fly; condor's short put is well paid")
+    elif skew_pct is not None and skew_pct <= cfg.skew_low_pct:
+        warns.append(f"SKEW_CHEAP({skew_pct:.0f}%ile): fly favoured; wings are cheap, little tail fear")
     if skew is not None and skew > cfg.steep_skew:
         warns.append(f"STEEP_PUT_SKEW({skew:.1f})")
     if snap.vvix is not None and snap.vvix > cfg.vvix_size_down:
@@ -137,29 +148,36 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
     # scores (0..1). Fly wants tighter conditions than condor.
     compress = _ramp(rv5 / max(rv20, 1e-6), 1.2, 0.6)
     vrp_s = _ramp(vrp, 0, 6)
-    fly = (0.25 * _ramp(ivr, cfg.fly_min_ivr - 10, cfg.fly_min_ivr + 15)
-           + 0.25 * vrp_s
+    skew_s = _ramp(skew_pct, cfg.skew_high_pct, cfg.skew_low_pct) if skew_pct is not None else 0.5  # 1 = cheap skew
+    fly = (0.20 * _ramp(ivr, cfg.fly_min_ivr - 10, cfg.fly_min_ivr + 15)
+           + 0.20 * vrp_s
            + 0.20 * _ramp(adx, cfg.fly_max_adx + 8, cfg.fly_max_adx - 5)
-           + 0.20 * _ramp(abs(z), cfg.fly_max_sma_z + 0.5, cfg.fly_max_sma_z - 0.3)
-           + 0.10 * compress)
+           + 0.15 * _ramp(abs(z), cfg.fly_max_sma_z + 0.5, cfg.fly_max_sma_z - 0.3)
+           + 0.10 * compress
+           + 0.15 * skew_s)
     condor = (0.25 * _ramp(ivr, cfg.condor_min_ivr - 5, cfg.condor_min_ivr + 20)
-              + 0.25 * vrp_s
+              + 0.20 * vrp_s
               + 0.20 * _ramp(adx, cfg.condor_max_adx + 8, cfg.condor_max_adx - 8)
-              + 0.20 * _ramp(abs(z), cfg.condor_max_sma_z + 0.5, cfg.condor_max_sma_z - 0.7)
-              + 0.10 * (0.5 + 0.5 * compress))
+              + 0.15 * _ramp(abs(z), cfg.condor_max_sma_z + 0.5, cfg.condor_max_sma_z - 0.7)
+              + 0.10 * (0.5 + 0.5 * compress)
+              + 0.10 * (1 - skew_s))
     if ts is not None:
         fly *= _ramp(ts, 1.0, 0.85) * 0.3 + 0.7
         condor *= _ramp(ts, 1.0, 0.85) * 0.3 + 0.7
 
     strategy = "NONE"
     if not vetoes:
-        if fly >= cfg.min_score and fly >= condor and ivr >= cfg.fly_min_ivr and adx <= cfg.fly_max_adx and abs(z) <= cfg.fly_max_sma_z:
+        skew_ok = skew_pct is None or skew_pct <= cfg.fly_max_skew_pct
+        if (fly >= cfg.min_score and fly >= condor and skew_ok and ivr >= cfg.fly_min_ivr
+                and adx <= cfg.fly_max_adx and abs(z) <= cfg.fly_max_sma_z):
             strategy = "IRON_FLY"
         elif condor >= cfg.min_score:
             strategy = "IRON_CONDOR"
     return Regime(strategy, round(fly, 3), round(condor, 3), round(ivr, 1), round(ivp, 1), snap.vix, round(rv20, 2),
                   round(rv5, 2), round(yz20, 2), round(vrp, 2), round(ts, 3) if ts else None,
                   round(ts9, 3) if ts9 else None, snap.vvix, round(adx, 1), round(z, 2), round(bbw, 1),
-                  round(skew, 2) if skew is not None else None, round(atm_iv, 2) if atm_iv else None,
+                  round(skew, 2) if skew is not None else None,
+                  round(skew_idx, 2) if skew_idx is not None else None, round(skew_pct, 1) if skew_pct is not None else None,
+                  round(atm_iv, 2) if atm_iv else None,
                   round(em, 1) if em else None, round(spread, 3) if spread is not None else None,
                   round(vix_jump, 4), vetoes, warns, ev_names)
