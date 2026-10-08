@@ -58,13 +58,25 @@ def test_cpi_nfp_pce_block_entry():
 def test_skew_tilts_fly_vs_condor():
     ts = datetime(2026, 9, 21, 10, 15, tzinfo=ET)
     def scan(level):
-        return Engine(SyntheticFeed(regime="calm", ts=ts, skew_end=level), Config(), "weekly", journal=None).scan().regime
+        return Engine(SyntheticFeed(regime="calm", ts=ts, skew_end=level, vix_trend=-0.5), Config(), "weekly", journal=None).scan().regime
     cheap, rich = scan(110.0), scan(165.0)       # far below / above the synthetic ~135 mean
     assert cheap.skew_pct < 10 and rich.skew_pct > 90, (cheap.skew_pct, rich.skew_pct)
     assert cheap.fly_score > rich.fly_score and rich.condor_score > cheap.condor_score
     assert cheap.strategy == "IRON_FLY", cheap        # same market, cheap skew -> fly
     assert rich.strategy == "IRON_CONDOR", rich       # rich skew -> fly gated off
     assert any(w.startswith("SKEW_RICH") for w in rich.warnings)
+
+
+def test_vol_level_and_trend_gate_fly():
+    ts = datetime(2026, 9, 21, 10, 15, tzinfo=ET)
+    def scan(**kw):
+        return Engine(SyntheticFeed(regime="calm", ts=ts, skew_end=110.0, **kw), Config(), "weekly", journal=None).scan().regime
+    falling, rising = scan(vix_trend=-0.5), scan(vix_trend=0.5)
+    assert falling.vol_falling and not rising.vol_falling
+    assert falling.ivp <= 75 and falling.strategy == "IRON_FLY", falling
+    assert rising.strategy != "IRON_FLY" and any(w.startswith("VOL_RISING") for w in rising.warnings), rising
+    high = scan(atm_iv=30.0, vix_trend=-0.5)               # falling, but VIX at the top of its year
+    assert high.ivp > 75 and high.strategy != "IRON_FLY" and any(w.startswith("VOL_HIGH") for w in high.warnings), high
 
 
 def test_management_triggers():

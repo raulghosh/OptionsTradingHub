@@ -61,6 +61,9 @@ class Config:
     # regime thresholds
     ivr_lookback: int = 252
     fly_min_ivr: float = 35.0
+    fly_max_ivp: float = 75.0             # no fly when VIX is above this 1y percentile: vol too high to pin
+    fly_need_vol_falling: bool = True     # no fly unless VIX's 3-day EMA is falling (vol coming in, not expanding)
+    vol_ema_span: int = 3
     condor_min_ivr: float = 20.0
     min_vrp: float = 0.0                  # VIX - RV20, vol points
     max_ts_ratio: float = 1.0             # VIX / VIX3M; >1 = backwardation

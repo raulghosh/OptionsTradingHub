@@ -49,6 +49,8 @@ high-credit, narrow-zone bet on mean reversion; the condor is the lower-credit, 
 | ADX(14) | Trend strength | < 20 | < 25 | > 25 |
 | (close − SMA20) / ATR | Extension from mean | |z| < 0.5 | |z| < 1.5 | > 1.5 |
 | RV5 / RV20 | Realized vol compressing | < 1 | any | rising = warning |
+| VIX 1y percentile | Is vol too high to pin | ≤ 75th | any | fly blocked above 75th |
+| VIX 3-day EMA direction | Is vol coming in or expanding | falling | any | fly blocked while rising |
 | CBOE SKEW percentile (252d) | Tail-put pricing vs its own history | low (≤ 30th) | high (≥ 70th) | fly blocked above 80th |
 | 25Δ put IV − 25Δ call IV | Skew on the traded expiry | — | — | > 8 vol pts = warning |
 | Bid/ask on the 16Δ strikes | Liquidity | < 10 % of mid | same | > 10 % |
@@ -58,7 +60,15 @@ high-credit, narrow-zone bet on mean reversion; the condor is the lower-credit, 
 Each strategy gets a 0–1 score. Fly: IV rank 20, VRP 20, ADX 20, mean distance 15, RV compression
 10, **cheap skew 15**. Condor: IV rank 25, VRP 20, ADX 20, mean distance 15, RV compression 10,
 **rich skew 10**. Any veto → `NONE`. Fly only if it also meets its own hard limits (IVR ≥ 35,
-ADX ≤ 20, |z| ≤ 0.5, SKEW ≤ 80th percentile); otherwise condor if its score ≥ `min_score` (0.55).
+ADX ≤ 20, |z| ≤ 0.5, SKEW ≤ 80th percentile, VIX ≤ 75th percentile, VIX 3-day EMA falling);
+otherwise condor if its score ≥ `min_score` (0.55). The VIX series used for rank, percentile and
+EMA includes today's live print, not just yesterday's close.
+
+**Why vol level and direction gate the fly.** The fly's profit zone is narrow and its short
+strikes are at the money, so it needs realized movement to shrink. Above the 75th percentile vol is
+too high to expect a pin; with vol's 3-day EMA rising the market is still repricing risk upward and
+the ATM short straddle carries the most vega and gamma of anything in the book. The condor's
+wider zone tolerates both, so it remains eligible.
 
 **Why skew picks between them.** The fly sells the ATM straddle and *buys* the OTM put wing; the
 condor *sells* an OTM put. When skew is historically low, OTM puts are cheap: the fly's protection

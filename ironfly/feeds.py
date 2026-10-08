@@ -321,9 +321,10 @@ class SyntheticFeed:
     """One snapshot: GBM history, contango VIX, BSM chain with put skew. Deterministic by seed."""
 
     def __init__(self, seed=7, days=420, spot0=6400.0, atm_iv=18.0, regime="calm", ts: datetime | None = None,
-                 dtes=(0, 1, 2, 7, 14, 30, 45), r=0.04, q=0.013, skew_end: float | None = None):
+                 dtes=(0, 1, 2, 7, 14, 30, 45), r=0.04, q=0.013, skew_end: float | None = None,
+                 vix_trend: float = 0.0):
         self.seed, self.days, self.spot0, self.atm_iv, self.regime, self.dtes, self.r, self.q = seed, days, spot0, atm_iv, regime, dtes, r, q
-        self.ts, self.skew_end = ts, skew_end
+        self.ts, self.skew_end, self.vix_trend = ts, skew_end, vix_trend   # vix_trend: pts/day over the last 5 days
 
     def snapshot(self) -> Snapshot:
         rng = np.random.default_rng(self.seed)
@@ -331,6 +332,8 @@ class SyntheticFeed:
         hist = _gbm_history(rng, self.days, ts.date(), self.spot0, self.regime)
         vix = hist["vix"].to_numpy().copy()
         vix[-15:] += np.linspace(0, self.atm_iv - vix[-1], 15)   # recent vol pickup so IVR is mid-range
+        if self.vix_trend:
+            vix[-5:] = self.atm_iv - self.vix_trend * np.arange(4, -1, -1)
         hist["vix"] = vix; hist["vix3m"] = vix / (1.08 if self.regime == "stress" else 0.92)
         hist["vix9d"] = vix * (1.05 if self.regime == "stress" else 0.95)
         if self.skew_end is not None:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import date
 
 import numpy as np
+import pandas as pd
 
 from . import indicators as ind
 from .config import Config, DTEProfile
@@ -40,6 +41,8 @@ class Regime:
     vetoes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     events: list[str] = field(default_factory=list)
+    vix_ema3: float | None = None      # EMA(vol_ema_span) of daily VIX incl. today's live print
+    vol_falling: bool | None = None    # EMA today < EMA yesterday
 
     def hostile(self) -> bool:
         """True when open positions should be defended, not just no new entries."""
@@ -85,7 +88,16 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
     rv20 = float(ind.realized_vol_cc(h["close"], 20).iloc[-1])
     rv5 = float(ind.realized_vol_cc(h["close"], 5).iloc[-1])
     yz20 = float(ind.yang_zhang(h, 20).iloc[-1]) if {"open", "high", "low"} <= set(h.columns) else rv20
-    ivr, ivp = ind.iv_rank(h["vix"], cfg.ivr_lookback)
+    # daily VIX with today's live value spliced in, so rank and trend see the current print
+    vix_s = h["vix"].dropna().copy()
+    today = pd.Timestamp(snap.ts.date())
+    if len(vix_s) and vix_s.index[-1] >= today:
+        vix_s.iloc[-1] = snap.vix
+    else:
+        vix_s.loc[today] = snap.vix
+    ivr, ivp = ind.iv_rank(vix_s, cfg.ivr_lookback)
+    ema = vix_s.ewm(span=cfg.vol_ema_span, adjust=False).mean()
+    vix_ema, vol_falling = float(ema.iloc[-1]), bool(ema.iloc[-1] < ema.iloc[-2])
     vrp = snap.vix - rv20
     ts = snap.vix / snap.vix3m if snap.vix3m else None
     ts9 = snap.vix9d / snap.vix if snap.vix9d else None
@@ -134,6 +146,10 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
         warns.append(f"SKEW_RICH({skew_pct:.0f}%ile): no fly; condor's short put is well paid")
     elif skew_pct is not None and skew_pct <= cfg.skew_low_pct:
         warns.append(f"SKEW_CHEAP({skew_pct:.0f}%ile): fly favoured; wings are cheap, little tail fear")
+    if ivp > cfg.fly_max_ivp:
+        warns.append(f"VOL_HIGH(VIX {ivp:.0f}%ile > {cfg.fly_max_ivp:.0f}): no fly")
+    elif cfg.fly_need_vol_falling and not vol_falling:
+        warns.append(f"VOL_RISING(VIX EMA{cfg.vol_ema_span} up): no fly until it turns down")
     if skew is not None and skew > cfg.steep_skew:
         warns.append(f"STEEP_PUT_SKEW({skew:.1f})")
     if snap.vvix is not None and snap.vvix > cfg.vvix_size_down:
@@ -168,7 +184,8 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
     strategy = "NONE"
     if not vetoes:
         skew_ok = skew_pct is None or skew_pct <= cfg.fly_max_skew_pct
-        if (fly >= cfg.min_score and fly >= condor and skew_ok and ivr >= cfg.fly_min_ivr
+        vol_ok = ivp <= cfg.fly_max_ivp and (vol_falling or not cfg.fly_need_vol_falling)
+        if (fly >= cfg.min_score and fly >= condor and skew_ok and vol_ok and ivr >= cfg.fly_min_ivr
                 and adx <= cfg.fly_max_adx and abs(z) <= cfg.fly_max_sma_z):
             strategy = "IRON_FLY"
         elif condor >= cfg.min_score:
@@ -180,4 +197,4 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
                   round(skew_idx, 2) if skew_idx is not None else None, round(skew_pct, 1) if skew_pct is not None else None,
                   round(atm_iv, 2) if atm_iv else None,
                   round(em, 1) if em else None, round(spread, 3) if spread is not None else None,
-                  round(vix_jump, 4), vetoes, warns, ev_names)
+                  round(vix_jump, 4), vetoes, warns, ev_names, round(vix_ema, 2), vol_falling)
