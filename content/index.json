@@ -1,0 +1,40 @@
+{
+ "blog": [
+  {
+   "slug": "2026-10-25-welcome",
+   "title": "Welcome to Trading_Hub",
+   "date": "2026-10-25",
+   "summary": "Why this site exists and what will live here.",
+   "order": 999,
+   "tags": [
+    "meta"
+   ]
+  }
+ ],
+ "learn": [
+  {
+   "slug": "iron-condors-and-butterflies",
+   "title": "Iron condors and iron butterflies, from the ground up",
+   "date": "",
+   "summary": "What the two structures are, how they make and lose money, and which market each one wants.",
+   "order": 1,
+   "tags": [
+    "options",
+    "iron condor",
+    "iron butterfly"
+   ]
+  },
+  {
+   "slug": "reading-the-vol-regime",
+   "title": "Reading the volatility regime",
+   "date": "",
+   "summary": "IV rank, the variance risk premium, term structure, vol of vol, skew, and vol trend \u2014 what each tells a premium seller.",
+   "order": 2,
+   "tags": [
+    "volatility",
+    "VIX",
+    "skew"
+   ]
+  }
+ ]
+}
