@@ -1,4 +1,4 @@
-"""CLI.  python -m ironfly demo | scan | manage | paper-open | record | backtest | show-config"""
+"""CLI.  python -m ironfly demo | scan | manage | paper-open | record | backtest | show-config | schwab-login"""
 from __future__ import annotations
 import argparse, json, sys
 from datetime import datetime
@@ -63,7 +63,7 @@ def print_scan(r):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="ironfly")
-    ap.add_argument("cmd", choices=["demo", "scan", "manage", "paper-open", "record", "backtest", "show-config"])
+    ap.add_argument("cmd", choices=["demo", "scan", "manage", "paper-open", "record", "backtest", "show-config", "schwab-login"])
     ap.add_argument("--feed", default="synthetic", choices=["synthetic", "csv", "schwab", "alpaca", "replay"])
     ap.add_argument("--snapshots", default="data/snapshots", help="folder for record / replay / backtest")
     ap.add_argument("--days", type=int, default=120, help="synthetic backtest length")
@@ -78,6 +78,9 @@ def main(argv=None):
 
     if a.cmd == "show-config":
         print(Config().to_json()); return
+    if a.cmd == "schwab-login":
+        from .creds import schwab_login
+        schwab_login(); return
     cfg = load_cfg(a.config)
     if a.cmd == "backtest":
         snaps = SyntheticPath(days=a.days) if a.feed == "synthetic" else store.ReplayFeed(a.snapshots)
@@ -116,4 +119,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:          # missing/expired credentials etc.: message, not traceback
+        raise SystemExit(f"error: {e}")

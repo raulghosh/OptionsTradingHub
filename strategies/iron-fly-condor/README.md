@@ -7,6 +7,7 @@ Thresholds are practitioner heuristics, not advice; calibrate them on your own d
 ```bash
 python -m ironfly demo                       # synthetic data, end to end
 python -m ironfly scan --profile weekly      # entry scan (synthetic by default)
+python -m ironfly schwab-login              # weekly: refresh token into ../../.env
 python -m ironfly scan --feed schwab --profile monthly
 python -m ironfly paper-open --feed schwab   # record last entry signal into positions.json
 python -m ironfly manage --feed schwab       # actions for every position in positions.json
@@ -16,8 +17,10 @@ python -m ironfly show-config > config.json  # then edit; every threshold lives 
 python tests/test_core.py
 ```
 
-Data: `SCHWAB_ACCESS_TOKEN` (SPX chain + $VIX family), or `APCA_API_KEY_ID`/`APCA_API_SECRET_KEY`
-(Alpaca has no SPX index options, so it runs on SPY x10 and pulls VIX/VIX3M/VVIX/VIX9D from CBOE's
+Data: Schwab (SPX chain + $VIX family) via `SCHWAB_APP_KEY` / `SCHWAB_APP_SECRET` /
+`SCHWAB_REFRESH_TOKEN` in the repo-root `.env` (see `.env.example`; `python -m ironfly schwab-login`
+fetches the refresh token, valid ~7 days, and every run exchanges it for a 30-minute access token).
+Or `APCA_API_KEY_ID`/`APCA_API_SECRET_KEY` (Alpaca has no SPX index options, so it runs on SPY x10 and pulls VIX/VIX3M/VVIX/VIX9D from CBOE's
 free CSVs). Any other broker: implement `MarketFeed.snapshot()` in `ironfly/feeds.py`, or dump
 `history.csv` + `chain.csv` and use `--feed csv`.
 

@@ -1,7 +1,8 @@
 """Market data adapters. Implement `MarketFeed.snapshot()` to plug in any broker.
 
-Feeds never place orders. Credentials come from environment variables only:
-  SCHWAB_ACCESS_TOKEN               (OAuth bearer, obtained by you)
+Feeds never place orders. Credentials come from the environment or a .env file (see creds.py and
+.env.example at the repo root):
+  SCHWAB_APP_KEY / SCHWAB_APP_SECRET / SCHWAB_REFRESH_TOKEN   (refreshed to an access token each run)
   APCA_API_KEY_ID / APCA_API_SECRET_KEY
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ import pandas as pd
 import requests
 
 from . import indicators as ind
+from .creds import load_env, schwab_access_token
 
 ET = ZoneInfo("America/New_York")
 SETTLE_TIME = time(16, 0)  # PM-settled SPX weeklies. AM-settled monthlies are ~6.5h earlier; immaterial for DTE>=1.
@@ -136,9 +138,7 @@ class SchwabFeed:
     BASE = "https://api.schwabapi.com/marketdata/v1"
 
     def __init__(self, token: str | None = None, symbol: str = "$SPX", max_dte: int = 60, r=0.04, q=0.013):
-        self.token = token or os.environ.get("SCHWAB_ACCESS_TOKEN")
-        if not self.token:
-            raise RuntimeError("Set SCHWAB_ACCESS_TOKEN (OAuth bearer token from your Schwab developer app).")
+        self.token = token or schwab_access_token()
         self.symbol, self.max_dte, self.r, self.q = symbol, max_dte, r, q
         self.s = requests.Session()
         self.s.headers["Authorization"] = f"Bearer {self.token}"
@@ -207,10 +207,11 @@ class AlpacaFeed:
     DATA = "https://data.alpaca.markets"
 
     def __init__(self, key=None, secret=None, underlying="SPY", max_dte=60, r=0.04, q=0.013):
+        load_env()
         key = key or os.environ.get("APCA_API_KEY_ID")
         secret = secret or os.environ.get("APCA_API_SECRET_KEY")
         if not (key and secret):
-            raise RuntimeError("Set APCA_API_KEY_ID and APCA_API_SECRET_KEY.")
+            raise RuntimeError("Set APCA_API_KEY_ID and APCA_API_SECRET_KEY in .env (copy .env.example).")
         self.underlying, self.max_dte, self.r, self.q = underlying, max_dte, r, q
         self.s = requests.Session()
         self.s.headers.update({"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret})

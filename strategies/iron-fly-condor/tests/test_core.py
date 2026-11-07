@@ -160,6 +160,28 @@ def test_backtest_accounting():
     assert rep.scans == rep.entries_signalled + sum(rep.blocked.values())
 
 
+def test_env_file_and_callback():
+    import os, tempfile
+    from pathlib import Path
+    from ironfly.creds import load_env, set_env_var, callback_code, find_env
+    with tempfile.TemporaryDirectory() as d:
+        root, sub = Path(d), Path(d) / "strategies" / "x"
+        sub.mkdir(parents=True)
+        (root / ".env").write_text('# comment\nIFLY_T1="abc"\nexport IFLY_T2=xyz\nIFLY_T3=\n')
+        os.environ["IFLY_T2"] = "keep"
+        assert find_env(sub) == (root / ".env").resolve()
+        load_env(find_env(sub))
+        assert os.environ["IFLY_T1"] == "abc" and os.environ["IFLY_T2"] == "keep" and "IFLY_T3" not in os.environ
+        set_env_var(root / ".env", "IFLY_T1", "new")
+        set_env_var(root / ".env", "IFLY_T4", "added")
+        text = (root / ".env").read_text()
+        assert "IFLY_T1=new" in text and "IFLY_T1=\"abc\"" not in text and text.rstrip().endswith("IFLY_T4=added")
+        assert text.startswith("# comment") and oct((root / ".env").stat().st_mode)[-3:] == "600"
+        for k in ("IFLY_T1", "IFLY_T2"):
+            os.environ.pop(k, None)
+    assert callback_code("https://127.0.0.1/?code=C0.abc%40&session=s1") == "C0.abc@"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

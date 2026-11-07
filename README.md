@@ -25,6 +25,19 @@ Home
 Static HTML/CSS/JS with no build tooling, so it can be hosted anywhere (GitHub Pages works as-is).
 Data is published into it by one local script.
 
+## Credentials
+
+All keys live in one `.env` file at the repo root. It is git-ignored.
+
+```bash
+cp .env.example .env          # then fill in SCHWAB_APP_KEY and SCHWAB_APP_SECRET
+cd strategies/iron-fly-condor && python3 -m ironfly schwab-login && cd ../..
+```
+
+`schwab-login` prints a Schwab consent link. Approve the app, then paste back the address your
+browser lands on; the refresh token is saved into `.env`. Schwab refresh tokens last about 7 days,
+so repeat this weekly. Access tokens last 30 minutes and are fetched automatically on every run.
+
 ## Run it locally
 
 ```bash
