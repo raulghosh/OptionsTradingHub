@@ -4,8 +4,8 @@
   python3 build.py --feed schwab    # live signals (needs SCHWAB_ACCESS_TOKEN)
   python3 build.py --no-ironfly     # content only
 
-ironfly is imported from ../IronFlyTrading (override with IRONFLY_PATH). Its config.json and
-positions.json, if present there, are used as-is.
+ironfly is imported from strategies/iron-fly-condor (override with IRONFLY_PATH). Its config.json
+and positions.json, if present there, are used as-is.
 """
 from __future__ import annotations
 import argparse
@@ -55,7 +55,7 @@ def _json_default(o):
 
 
 def ironfly(feed_name: str) -> dict:
-    path = Path(os.environ.get("IRONFLY_PATH", ROOT.parent / "IronFlyTrading"))
+    path = Path(os.environ.get("IRONFLY_PATH", ROOT / "strategies" / "iron-fly-condor"))
     sys.path.insert(0, str(path))
     from ironfly import Config, Engine
     from ironfly.feeds import AlpacaFeed, SchwabFeed, SyntheticFeed

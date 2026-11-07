@@ -1,17 +1,29 @@
-# Trading_Hub
+# OptionsTradingHub
 
-One site for everything trading: live signal modules, investor knowledge, and a personal blog.
-Static HTML/CSS/JS with no build tooling, so it can be hosted anywhere (GitHub Pages works as-is).
-Data is published into it by one local script.
+The main repo for options trading: the **Trading_Hub** website at the root, and every strategy
+engine in its own folder under `strategies/`. One clone, one push, one site.
+
+```
+OptionsTradingHub/
+├── index.html, assets/, content/, data/, build.py   Trading_Hub website
+└── strategies/
+    ├── iron-fly-condor/    SPX iron butterfly / iron condor signal engine (live)
+    └── calendar/           calendar spreads (planned)
+```
+
+The site has four parts:
 
 ```
 Home
 ├── Options Trading
-│   ├── Iron Fly & Iron Condor   live   (signals from ../IronFlyTrading)
+│   ├── Iron Fly & Iron Condor   live   (signals from strategies/iron-fly-condor)
 │   └── Calendar Spreads         planned
 ├── Learn                        Markdown articles in content/learn/
 └── Blog                         Markdown posts in content/blog/
 ```
+
+Static HTML/CSS/JS with no build tooling, so it can be hosted anywhere (GitHub Pages works as-is).
+Data is published into it by one local script.
 
 ## Run it locally
 
@@ -22,8 +34,8 @@ python3 -m http.server 8000       # then open http://localhost:8000
 ```
 
 Pages are fetched over HTTP, so open the site through a server, not by double-clicking `index.html`.
-`build.py` imports the engine from `../IronFlyTrading` (override with `IRONFLY_PATH`) and uses that
-repo's `config.json` and `positions.json` when present. It runs the weekly and monthly profiles;
+`build.py` imports the engine from `strategies/iron-fly-condor` (override with `IRONFLY_PATH`) and
+uses that folder's `config.json` and `positions.json` when present. It runs the weekly and monthly profiles;
 0DTE is deliberately left out.
 
 ## Add content
@@ -45,16 +57,21 @@ Body in Markdown. Tables, lists and code blocks all render.
 
 - Blog posts go in `content/blog/`, articles in `content/learn/`. The filename is the URL slug.
 
-## Add a module
+## Add a strategy
 
-1. Add an entry to `MODULES` at the top of `assets/app.js` (`status: 'live'` or `'planned'`).
-2. Add a route in `ROUTES` and a render function that reads its data from `data/<module>.json`.
-3. Have `build.py` write that JSON.
+1. Put the engine in `strategies/<name>/`. To bring in an existing repo with its history:
+   `git subtree add --prefix=strategies/<name> <repo-url-or-path> main`
+2. Add an entry to `MODULES` at the top of `assets/app.js` (`status: 'live'` or `'planned'`).
+3. Add a route in `ROUTES` and a render function that reads its data from `data/<module>.json`.
+4. Have `build.py` write that JSON.
+
+Each engine keeps its own README, tests and CLI; run them from inside its folder, for example
+`cd strategies/iron-fly-condor && python3 tests/test_core.py`.
 
 ## Publish
 
-Commit and push the folder to a GitHub repo, then turn on Pages (Settings → Pages → deploy from
-`main`, root). Rerun `python3 build.py --feed schwab` and push whenever you want fresh signals on
+Turn on GitHub Pages for this repo (Settings → Pages → deploy from `main`, root). The site is served
+from the root; the strategy folders are ignored by the browser. Rerun `python3 build.py --feed schwab` and push whenever you want fresh signals on
 the public page; anything in `data/` is what visitors see.
 
 Files: `index.html` (shell), `assets/style.css`, `assets/app.js` (router, pages, dashboard),
