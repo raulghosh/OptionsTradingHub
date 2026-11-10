@@ -72,7 +72,8 @@ def main(argv=None):
     ap.add_argument("--profile", default="weekly", choices=list(PROFILES))
     ap.add_argument("--config", default="config.json")
     ap.add_argument("--positions", default="positions.json")
-    ap.add_argument("--daily-pnl", type=float, default=0.0)
+    ap.add_argument("--daily-pnl", type=float, default=None, help="override; default is computed from --positions")
+    ap.add_argument("--marks", default="pnl_marks.json", help="day-start marks for the daily-loss kill switch")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -89,7 +90,7 @@ def main(argv=None):
         rep.to_csv("backtest_trades.csv"); print("trades -> backtest_trades.csv")
         if a.json: print(json.dumps(rep.summary(), indent=1))
         return
-    eng = Engine(make_feed(a), cfg, a.profile)
+    eng = Engine(make_feed(a), cfg, a.profile, marks=a.marks)
     if a.cmd == "record":
         print("saved", store.save(eng.snapshot(), a.snapshots)); return
     positions = load_positions(a.positions)

@@ -41,6 +41,7 @@ so repeat this weekly. Access tokens last 30 minutes and are fetched automatical
 ## Run it locally
 
 ```bash
+pip install -r requirements.txt   # numpy, pandas, scipy, requests
 python3 build.py                  # index content + publish ironfly signals (synthetic demo data)
 python3 build.py --feed schwab    # live signals; needs SCHWAB_ACCESS_TOKEN
 python3 -m http.server 8000       # then open http://localhost:8000

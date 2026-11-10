@@ -1,12 +1,14 @@
 """Macro event calendar: FOMC decisions + the three scheduled data prints that move SPX vol
 (CPI, the jobs report, and core PCE), plus computed monthly opex / quad witching.
 
-Exact 2026 dates below are sourced from the official calendars: federalreserve.gov/monetarypolicy
+Exact dates below are sourced from the official calendars: federalreserve.gov/monetarypolicy
 /fomccalendars.htm (FOMC), bls.gov/schedule (CPI, Employment Situation), bea.gov/news/schedule
-(Personal Income and Outlays, which contains the PCE price index) — pulled via web search on
-2026-09-13. Re-verify each year; the Fed and BLS both publish 12-18 months ahead. For any date
-outside SEED's coverage, NFP falls back to the first-Friday heuristic (mostly right, sometimes off
-by a week around holidays) and CPI/PCE emit nothing rather than a bad guess. Maintain
+(Personal Income and Outlays, which contains the PCE price index). 2026 was pulled on 2026-09-13,
+2027 on 2026-11-10. FOMC dates are the decision (second) day and stay tentative until confirmed at
+the meeting before. Re-verify each year; the Fed and BLS publish 12-18 months ahead, BEA about a
+year ahead. SEED_THROUGH is the last day every series is covered: past it NFP falls back to the
+first-Friday heuristic, CPI/PCE/FOMC emit nothing rather than a bad guess, and
+coverage_warning() fires so the regime output says the calendar has run out. Maintain
 data/events.json for anything not seeded here (extra CPI/PCE prints, earnings, etc.)."""
 from __future__ import annotations
 import calendar
@@ -29,12 +31,37 @@ PCE_2026 = ["2026-01-22", "2026-02-20", "2026-03-13", "2026-04-09", "2026-04-30"
             "2026-06-25", "2026-07-30", "2026-08-26", "2026-09-30", "2026-10-29", "2026-11-25",
             "2026-12-23"]
 
-SEED = ([{"date": d, "name": "FOMC"} for d in FOMC_2026]
-        + [{"date": d, "name": "CPI"} for d in CPI_2026]
-        + [{"date": d, "name": "NFP"} for d in NFP_2026]
-        + [{"date": d, "name": "PCE"} for d in PCE_2026])
+# 2027: every date read off the official pages on 2026-11-10; none was marked tentative except the
+# Fed's standing note that all FOMC dates are. The Dec 2027 CPI/NFP/PCE prints land in Jan 2028
+# and are not published yet, so they are left out rather than guessed.
+FOMC_2027 = ["2027-01-27", "2027-03-17", "2027-04-28", "2027-06-09",
+             "2027-07-28", "2027-09-15", "2027-10-27", "2027-12-08",
+             "2028-01-26"]   # Jan 25-26 2028 already announced by the Fed
 
-_SEEDED_MONTHS = {(date.fromisoformat(d).year, date.fromisoformat(d).month) for d in NFP_2026}
+CPI_2027 = ["2027-01-13", "2027-02-11", "2027-03-10", "2027-04-13", "2027-05-12", "2027-06-10",
+            "2027-07-14", "2027-08-11", "2027-09-14", "2027-10-14", "2027-11-10", "2027-12-10"]
+
+NFP_2027 = ["2027-01-08", "2027-02-05", "2027-03-05", "2027-04-02", "2027-05-07", "2027-06-04",
+            "2027-07-02", "2027-08-06", "2027-09-03", "2027-10-08", "2027-11-05", "2027-12-03"]
+
+PCE_2027 = ["2027-01-28", "2027-02-25", "2027-03-31", "2027-04-29", "2027-05-27", "2027-06-25",
+            "2027-07-29", "2027-08-25", "2027-09-30", "2027-10-28", "2027-11-24", "2027-12-22"]
+
+SEED_THROUGH = date(2027, 12, 31)   # bump when the next year's dates are added
+
+SEED = ([{"date": d, "name": "FOMC"} for d in FOMC_2026 + FOMC_2027]
+        + [{"date": d, "name": "CPI"} for d in CPI_2026 + CPI_2027]
+        + [{"date": d, "name": "NFP"} for d in NFP_2026 + NFP_2027]
+        + [{"date": d, "name": "PCE"} for d in PCE_2026 + PCE_2027])
+
+_SEEDED_MONTHS = {(date.fromisoformat(d).year, date.fromisoformat(d).month) for d in NFP_2026 + NFP_2027}
+
+
+def coverage_warning(today: date, days_ahead: int = 0) -> str | None:
+    """Non-None once the window [today, today+days_ahead] runs past the seeded calendar."""
+    if today + timedelta(days=days_ahead) > SEED_THROUGH:
+        return f"EVENT_CALENDAR_ENDS_{SEED_THROUGH.isoformat()}: FOMC/CPI/PCE not seeded past it, update ironfly/events.py"
+    return None
 
 
 def _nth_friday(y: int, m: int, n: int) -> date:

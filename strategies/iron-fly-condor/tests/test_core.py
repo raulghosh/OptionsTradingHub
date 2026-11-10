@@ -55,6 +55,55 @@ def test_cpi_nfp_pce_block_entry():
         assert any(v.startswith(f"EVENT_{tag}") for v in vetoes), (tag, vetoes)
 
 
+def test_2027_calendar_blocks_entry():
+    for d, tag in [(datetime(2027, 1, 25, 10, 15, tzinfo=ET), "FOMC"),     # FOMC Jan 27
+                   (datetime(2027, 1, 11, 10, 15, tzinfo=ET), "CPI"),      # CPI Jan 13
+                   (datetime(2027, 2, 3, 10, 15, tzinfo=ET), "NFP"),       # NFP Feb 5
+                   (datetime(2027, 3, 29, 10, 15, tzinfo=ET), "PCE")]:     # PCE Mar 31
+        eng = Engine(SyntheticFeed(regime="calm", ts=d), Config(), "weekly", journal=None)
+        g = eng.scan().regime
+        assert any(v.startswith(f"EVENT_{tag}") for v in g.vetoes), (tag, g.vetoes)
+        assert not any(w.startswith("EVENT_CALENDAR_ENDS") for w in g.warnings)
+
+
+def test_calendar_runout_warns():
+    from ironfly.events import SEED_THROUGH
+    late = datetime.combine(SEED_THROUGH, time(10, 15), tzinfo=ET) + timedelta(days=1)
+    g = Engine(SyntheticFeed(regime="calm", ts=late), Config(), "weekly", journal=None).scan().regime
+    assert any(w.startswith("EVENT_CALENDAR_ENDS") for w in g.warnings), g.warnings
+
+
+def test_calendar_has_runway():
+    # Fails ~2 months before the seeded calendar ends: time to add next year's FOMC/CPI/NFP/PCE dates.
+    from datetime import date
+    from ironfly.events import SEED_THROUGH
+    assert date.today() + timedelta(days=60) <= SEED_THROUGH, f"event calendar ends {SEED_THROUGH}: update ironfly/events.py"
+
+
+def test_daily_loss_kill_switch_from_positions():
+    import json, tempfile
+    cfg, prof = Config(), PROFILES["weekly"]
+    ts = datetime(2026, 9, 21, 15, 45, tzinfo=ET)
+    snap = SyntheticFeed(regime="calm", ts=ts).snapshot()
+    expiry = [e for e in snap.expiries() if round(snap.dte(e)) == 7][0]
+    pos = Position.from_structure("t", build_condor(snap, expiry, cfg, prof), 10, ts, "weekly", snap.spot)
+    with tempfile.TemporaryDirectory() as d:
+        marks = f"{d}/marks.json"
+        eng = Engine(None, cfg, "weekly", journal=None, marks=marks)
+        eng.set_snapshot(snap)
+        day1 = eng.daily_pnl([pos])                   # opened today: P&L since entry (just slippage)
+        assert -1000 < day1 <= 0
+        # next day, fresh engine (as cron would run it), spot gaps through the short call
+        hot = SyntheticFeed(regime="calm", ts=ts + timedelta(days=1), spot0=next(l["strike"] for l in pos.legs if l["cp"] == "C" and l["qty"] < 0) + 20, dtes=(6,)).snapshot()
+        eng2 = Engine(None, cfg, "weekly", journal=None, marks=marks)
+        eng2.set_snapshot(hot)
+        r = eng2.scan([pos])
+        assert any("daily loss" in k for k in r.kill), r.kill
+        assert abs(json.loads(open(marks).read())["baseline"]["t"] - day1) < 0.01   # baseline = yesterday's last mark
+        assert not any("daily loss" in k for k in eng2.scan([pos], daily_pnl_usd=0.0).kill)   # override wins
+        assert eng2.scan([]).kill == r.kill        # closed today: its loss still counts
+
+
 def test_skew_tilts_fly_vs_condor():
     ts = datetime(2026, 9, 21, 10, 15, tzinfo=ET)
     def scan(level):

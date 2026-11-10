@@ -14,7 +14,7 @@ python -m ironfly manage --feed schwab       # actions for every position in pos
 python -m ironfly record --feed schwab       # save one snapshot to data/snapshots/ (cron it every 15 min)
 python -m ironfly backtest --days 250        # synthetic path; --feed replay --snapshots data/snapshots for real
 python -m ironfly show-config > config.json  # then edit; every threshold lives there
-python tests/test_core.py
+python tests/test_core.py                  # needs: pip install -r ../../requirements.txt
 ```
 
 Data: Schwab (SPX chain + $VIX family) via `SCHWAB_APP_KEY` / `SCHWAB_APP_SECRET` /
@@ -102,6 +102,10 @@ spot when one exists (pin magnet), otherwise ATM.
 - × 0.75 if regime score < 0.75; × 0.5 if VVIX > 110; × 0.5 if IVR > 80 (vol can keep expanding).
 - Total open max-loss ≤ 8 % of account; ≤ 4 positions; |portfolio delta| ≤ 40 per $100k.
 - Kill switch: VIX +20 % on the day or daily loss ≥ 3 % → no entries, defend what is open.
+  Daily P&L is computed from `positions.json`: each run marks every position at its close cost and
+  `pnl_marks.json` keeps the last mark from the previous day as the baseline, so run `manage` (or
+  `record` + `scan`) near the close. Positions opened today count from entry; ones removed from
+  `positions.json` today keep their last mark. `--daily-pnl X` overrides the computed number.
 
 ## 5. Holding period: the trade's own half-life
 
@@ -216,9 +220,9 @@ recorded snapshots, and only after you have several months of them.
 - **GEX / dealer gamma** (needs full OI by strike): positive GEX supports the fly, negative argues
   for wider condors or nothing. Hook: `structure.magnet_strike` is the natural home.
 - **Intraday 0DTE features**: opening-range width vs expected move, VWAP distance, 1-minute realized vol.
-- **Event calendar upkeep**: FOMC, CPI, the jobs report, and PCE are seeded for all of 2026 in
-  `ironfly/events.py` from the Fed/BLS/BEA official calendars. Re-pull and update `FOMC_2026` /
-  `CPI_2026` / `NFP_2026` / `PCE_2026` each year (roughly Q4, once the next year's calendars are
+- **Event calendar upkeep**: FOMC, CPI, the jobs report, and PCE are seeded for 2026 and 2027 in
+  `ironfly/events.py` from the Fed/BLS/BEA official calendars. Add the next year's `FOMC_` /
+  `CPI_` / `NFP_` / `PCE_` lists and bump `SEED_THROUGH` each year (roughly Q4, once the next year's calendars are
   published) or as revisions land. Anything else — an unseeded print, an earnings date, a
   geopolitical event — goes in `data/events.json` (`[{"date":"2026-10-14","name":"CPI"}]`), which
   is merged on top of the seed.

@@ -1,0 +1,5 @@
+# Everything the site build and strategies/ need: pip install -r requirements.txt
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10      # IV solver (brentq)
+requests>=2.28   # Schwab / Alpaca / CBOE feeds

@@ -9,7 +9,7 @@ import pandas as pd
 
 from . import indicators as ind
 from .config import Config, DTEProfile
-from .events import blocking_events
+from .events import blocking_events, coverage_warning
 from .feeds import Snapshot, OptionQuote
 
 
@@ -133,6 +133,8 @@ def classify(snap: Snapshot, cfg: Config, profile: DTEProfile, events: list[dict
     ev_names = [f"{e['name']}@{e['date']}" for e in ev]
     if ev:
         vetoes.append("EVENT_" + ev[0]["name"].replace("(approx)", ""))
+    if w := coverage_warning(snap.ts.date(), profile.no_entry_days_before_event):
+        warns.append(w)   # ponytail: warning, not veto; add events to data/events.json meanwhile
     hhmm = snap.ts.strftime("%H:%M")
     if profile.target_dte == 0 and not (profile.entry_window[0] <= hhmm <= profile.entry_window[1]):
         vetoes.append("OUTSIDE_ENTRY_WINDOW")

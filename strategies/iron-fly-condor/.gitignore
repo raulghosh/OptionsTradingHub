@@ -4,3 +4,4 @@ signals.jsonl
 backtest_trades.csv
 positions.json
 __pycache__/
+pnl_marks.json
